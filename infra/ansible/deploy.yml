@@ -1,0 +1,73 @@
+---
+- hosts: production
+  become: true
+  vars_prompt:
+    - name: gh_pat
+      prompt: "Please enter your GitHub Personal Access Token (GH_PAT) for ghcr.io"
+      private: yes
+
+  tasks:
+    - name: "Ensure essential packages are installed (git, curl)"
+      apt:
+        name:
+          - git
+          - curl
+        state: present
+        update_cache: yes
+
+    - name: "Check if Docker is installed"
+      stat:
+        path: /usr/bin/docker
+      register: docker_bin
+
+    - name: "Install Docker if not present"
+      shell: curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+      when: not docker_bin.stat.exists
+      args:
+        warn: false
+
+    - name: "Check if Docker Compose is installed"
+      stat:
+        path: /usr/local/bin/docker-compose
+      register: docker_compose_bin
+
+    - name: "Install Docker Compose if not present"
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x,g+x,o+x'
+      when: not docker_compose_bin.stat.exists
+
+    - name: "Ensure project directory exists"
+      file:
+        path: /srv/anaconda
+        state: directory
+
+    - name: "Clone or update the repository"
+      git:
+        repo: 'https://github.com/GodnySoft/anaconda_site.git'
+        dest: /srv/anaconda
+        version: main
+        force: yes
+
+    - name: "Copy production environment file"
+      copy:
+        src: ../../.env.prod
+        dest: /srv/anaconda/.env.prod
+
+    - name: "DIAGNOSTIC: Manually log in to GHCR"
+      command: echo "{{ gh_pat }}" | docker login ghcr.io -u "GodnySoft" --password-stdin
+      no_log: true
+      register: login_result
+
+    - name: "Show login result"
+      debug:
+        var: login_result.stdout_lines
+
+    - name: "DIAGNOSTIC: Manually pull the API image"
+      command: docker pull ghcr.io/godnysoft/anaconda_site/api:latest
+      register: pull_result
+
+    - name: "Show pull result"
+      debug:
+        var: pull_result.stdout_lines

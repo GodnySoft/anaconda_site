@@ -1,0 +1,60 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_API: ghcr.io/godnysoft/anaconda_site/api
+  IMAGE_NAME_WEB: ghcr.io/godnysoft/anaconda_site/web
+
+jobs:
+  build-and-push-api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./api
+          push: true
+          tags: ${{ env.IMAGE_NAME_API }}:latest,${{ env.IMAGE_NAME_API }}:${{ github.sha }}
+
+  build-and-push-web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./web
+          dockerfile: ./web/Dockerfile.prod
+          push: true
+          tags: ${{ env.IMAGE_NAME_WEB }}:latest,${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}

@@ -1,0 +1,15 @@
+# Feed Events
+
+Feed events represent business actions:
+
+- client message;
+- manager response;
+- invoice created;
+- payment confirmed;
+- task assigned;
+- approval requested;
+- control warning;
+- AI inline hint.
+
+Future backend contracts should keep event types explicit and auditable.
+

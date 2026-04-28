@@ -1,0 +1,18 @@
+# Demo Page
+
+## URL
+
+`/demo`
+
+## Purpose
+
+Show how a manager works inside ANACONDA: client, communication, invoices, 1C context, actions, and AI hints in one surface.
+
+## Scope
+
+The page is a visual demo and uses typed mock data. It is not a production CRM or realtime chat implementation.
+
+## CTA
+
+The final CTA asks for a personal demonstration and submits leads with `source_page=demo`.
+

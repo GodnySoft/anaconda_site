@@ -1,0 +1,27 @@
+const timelineData = [
+  { year: '1', title: 'Единое окно', text: 'Собираем все коммуникации в одном месте.' },
+  { year: '2', title: 'Управляемый отдел продаж', text: 'Добавляем контроль задач и аналитику.' },
+  { year: '3', title: 'Компания как система', text: 'Подключаем все отделы, автоматизируем процессы.' },
+  { year: '4', title: 'Финансовый контроль', text: 'Интегрируем биллинг и управленческий учет.' },
+  { year: '5', title: 'AI-ассистент', text: 'Внедряем корпоративный AI для помощи сотрудникам.' },
+];
+
+export default function Timeline() {
+  return (
+    <div className="relative wrap overflow-hidden p-10 h-full">
+      <div className="border-2-2 absolute border-opacity-20 border-gray-700 h-full border" style={{ left: '50%' }}></div>
+      {timelineData.map((item, index) => (
+        <div key={index} className={`mb-8 flex justify-between items-center w-full ${index % 2 === 0 ? 'flex-row-reverse left-timeline' : 'right-timeline'}`}>
+          <div className="order-1 w-5/12"></div>
+          <div className="z-20 flex items-center order-1 bg-gray-800 shadow-xl w-8 h-8 rounded-full">
+            <h1 className="mx-auto font-semibold text-lg text-white">{item.year}</h1>
+          </div>
+          <div className="order-1 bg-gray-400 rounded-lg shadow-xl w-5/12 px-6 py-4">
+            <h3 className="mb-3 font-bold text-gray-800 text-xl">{item.title}</h3>
+            <p className="text-sm leading-snug tracking-wide text-gray-900 text-opacity-100">{item.text}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

@@ -1,0 +1,18 @@
+# CTA Flow
+
+## Primary conversion
+
+All stage 1-4 CTAs route users to the existing lead capture flow.
+
+## Source pages
+
+- `landing`
+- `contacts`
+- `implementation-levels`
+- `demo`
+- `workspace`
+
+## Contract
+
+The frontend sends `source_page` in `POST /api/v1/leads`. Backend persists it in `leads.source_page`.
+

@@ -1,0 +1,22 @@
+# Contact Flow
+
+## Goal
+
+Collect audit requests with minimum friction and without promising unavailable product functionality.
+
+## Form fields
+
+- `name`
+- `company`
+- `contact`
+- `message`
+- `consent`
+- `source_page`
+
+## UX behavior
+
+- Success state appears without page reload.
+- Failed submit keeps entered data.
+- Validation error explains required fields.
+- `source_page` identifies the page that generated the lead.
+

@@ -1,0 +1,16 @@
+# Task Flow
+
+Tasks are part of the operational feed, not a disconnected module.
+
+Task fields for future API design:
+
+- title;
+- responsible user;
+- deadline;
+- related client;
+- related document;
+- status;
+- history.
+
+Current implementation is visual/mock-only.
+

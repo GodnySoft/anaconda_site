@@ -1,0 +1,42 @@
+import { useState } from 'react';
+
+export default function ChatbotUI() {
+  const [prompt, setPrompt] = useState('');
+  const [response, setResponse] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const res = await fetch('/api/v1/chatbot', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      setResponse(data.response);
+    } else {
+      alert('Failed to get response from chatbot.');
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[600px]">
+      <div className="flex-grow p-4 bg-gray-100 rounded overflow-y-auto">
+        {response && <div className="p-2 rounded bg-white">{response}</div>}
+      </div>
+      <form onSubmit={handleSubmit} className="mt-4 flex">
+        <input 
+          type="text" 
+          value={prompt} 
+          onChange={(e) => setPrompt(e.target.value)} 
+          className="border p-2 w-full rounded"
+        />
+        <button type="submit" className="bg-blue-500 text-white p-2 rounded ml-2">Send</button>
+      </form>
+    </div>
+  );
+}
