@@ -1,26 +1,46 @@
 # Motion Guidelines
 
-## Principles
+## Принципы
 
 - Motion должен объяснять систему, а не отвлекать.
-- Анимации опираются на `transform` и `opacity`.
-- Постоянные эффекты ограничены hero-секцией.
-- На mobile применяется упрощенная версия motion.
+- Анимации опираются на `transform`, `opacity`, SVG stroke animation и лёгкие blur-слои.
+- Постоянные эффекты ограничены hero-секцией и несколькими акцентными элементами.
+- На mobile применяется упрощённая версия motion.
+- При `prefers-reduced-motion` сайт остаётся полностью читаемым без потери смысла.
 
-## Hero
+## Реализованная motion-архитектура
 
-- SVG/DOM-схема показывает `Chaos → Control`: Telegram, WhatsApp, MAX, Email, Excel, 1С, CRM, звонки и базы данных сходятся в окно `ANACONDA`.
-- Линии данных проходят по маршрутам без тяжелых particles и без 3D.
-- Центральное окно появляется после источников и показывает чат, контекст 1С и действие менеджера.
+### Scroll reveal
 
-## Scroll storytelling
+Файл: `../web/components/ui/Reveal.tsx`
 
-- Секции проявляются по мере входа во viewport.
-- Блок “Как это работает” получает пошаговое появление, чтобы имитировать прохождение потока данных.
-- Карточки реагируют на hover только subtle border/background/translate effects.
+Поведение:
+- секции и карточки проявляются при входе во viewport;
+- используется `IntersectionObserver`;
+- повторного бесконечного проигрывания нет;
+- при reduced motion reveal отключается.
 
-## Accessibility
+### Hero narrative motion
 
-- При `prefers-reduced-motion` отключаются бесконечные анимации и hover physics.
-- Все ключевые состояния остаются читаемыми без motion.
-- Запрещены aggressive parallax, gaming-like effects, crypto landing aesthetics и meaningless motion.
+Файл: `../web/components/motion/ChaosToOrderVisual.tsx`
+
+Поведение:
+- источники данных появляются вокруг ядра ANACONDA;
+- SVG-пути анимируют поток данных к центру;
+- центральный core мягко пульсирует;
+- внутри core-card последовательно читается рабочий контекст: сообщение, системный контекст, действие.
+
+## Что запрещено
+
+- агрессивный parallax;
+- тяжёлые particle effects;
+- 3D / Three.js на Этапе 1;
+- бессмысленные бесконечные анимации ради «эффекта»;
+- crypto / gaming aesthetics.
+
+## План следующей итерации по анимации
+
+1. Довести ручной тайминг hero под утверждённый визуальный ритм.
+2. Добавить тонкую stagger-анимацию для мобильного меню и CTA.
+3. При необходимости вынести motion tokens в отдельный shared config, если секций станет больше.
+4. Не подключать тяжёлые библиотеки, пока DOM/SVG motion покрывает narrative сайта.

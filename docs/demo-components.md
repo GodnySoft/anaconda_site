@@ -1,15 +1,1 @@
-# Demo Components
-
-Current implementation is centered in `web/components/anaconda-ui.tsx`.
-
-Core visual blocks:
-
-- `DemoWorkspace`
-- counterparty list
-- chat event cards
-- counterparty context card
-- action buttons
-- AI recommendation block
-
-Future extraction can split these into `components/demo/*` when the demo becomes interactive.
-
+# Demo Components  Current implementation is centered in `web/components/anaconda-ui.tsx`.  Core visual blocks:  - `DemoWorkspace` - counterparty list - chat event cards - counterparty context card - action buttons - AI recommendation block  Future extraction can split these into `components/demo/*` when the demo becomes interactive. 

@@ -1,10 +1,18 @@
-import ChatbotUI from '../components/ChatbotUI';
+import Head from "next/head";
 
-export default function Chatbot() {
+import ChatbotUI from "../components/ChatbotUI";
+
+export default function ChatbotPage() {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 text-center">AI Chatbot</h1>
-      <ChatbotUI />
-    </div>
+    <>
+      <Head>
+        <title>AI Chatbot — ANACONDA</title>
+        <meta name="description" content="Черновой AI-маршрут ANACONDA." />
+      </Head>
+      <div className="container mx-auto p-4">
+        <h1 className="mb-4 text-center text-2xl font-bold">AI Chatbot</h1>
+        <ChatbotUI />
+      </div>
+    </>
   );
 }

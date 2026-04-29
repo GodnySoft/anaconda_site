@@ -1,14 +1,14 @@
-from fastapi import FastAPI, Depends, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, WebSocket
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .core.db import SessionLocal, engine
+from .core.db import SessionLocal
 
-models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# Dependency
+
 def get_db():
     db = SessionLocal()
     try:
@@ -24,6 +24,9 @@ def health():
 
 @app.post("/api/v1/leads", response_model=schemas.Lead)
 def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
+    if not lead.consent:
+        raise HTTPException(status_code=422, detail="consent must be accepted")
+
     db_lead = models.Lead(**lead.dict())
     db.add(db_lead)
     db.commit()
@@ -33,21 +36,30 @@ def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
 
 @app.get("/api/v1/channels", response_model=list[schemas.Channel])
 def read_channels(db: Session = Depends(get_db)):
-    return db.query(models.Channel).all()
+    return db.query(models.Channel).order_by(models.Channel.id.asc()).all()
 
 
 @app.post("/api/v1/channels", response_model=schemas.Channel)
 def create_channel(channel: schemas.ChannelCreate, db: Session = Depends(get_db)):
     db_channel = models.Channel(**channel.dict())
     db.add(db_channel)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="channel already exists") from exc
     db.refresh(db_channel)
     return db_channel
 
 
 @app.get("/api/v1/channels/{channel_id}/messages", response_model=list[schemas.Message])
 def read_messages(channel_id: int, db: Session = Depends(get_db)):
-    return db.query(models.Message).filter(models.Message.channel_id == channel_id).all()
+    return (
+        db.query(models.Message)
+        .filter(models.Message.channel_id == channel_id)
+        .order_by(models.Message.id.asc())
+        .all()
+    )
 
 
 @app.websocket("/ws/{channel_id}")
@@ -61,6 +73,7 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: int, db: Session 
         db.commit()
         db.refresh(db_message)
         await websocket.send_text(f"Message text was: {data}")
+
 
 @app.post("/api/v1/chatbot")
 def chatbot(prompt: str):

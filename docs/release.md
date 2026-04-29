@@ -2,101 +2,72 @@
 
 ## Назначение
 
-Release flow должен выпускать рабочий platform web surface без расхождения между кодом, docs, runtime и deploy-сценарием.
+Release flow должен выпускать рабочий public/runtime surface без расхождения между кодом, docs, runtime и deploy-сценарием.
+
+## Источник production trigger
+
+Production trigger — это успешный `push` в `main`.
+Именно `main` должен быть основной веткой репозитория после выравнивания git-истории.
 
 ## Release prerequisites
 
-Перед релизом должны быть выполнены:
+Перед релизом должны проходить:
 
 ```bash
 make lint
-make test
 make typecheck
 make build
-docker compose -f compose.prod.yml config
-make prod-smoke
-make prod-down
-make ansible-syntax
+make doctor
+make prod-config
 ```
 
-Также нужно проверить scope релиза:
-- public site / narrative changes;
-- API contract changes;
-- migrations;
-- infra / deploy / CI changes;
-- env-contract changes.
+На GitHub дополнительно выполняются:
 
-## Release branch discipline
+- frontend lint/typecheck/build;
+- backend compile sanity;
+- docker smoke с `web + api + postgres`;
+- публикация образов в GHCR.
 
-Предпочтительный поток:
-1. собрать релизный scope в отдельной branch;
-2. не использовать `git add .`, если worktree смешанный;
-3. проверить diff перед commit;
-4. слить branch в `main`;
-5. считать именно `push` в `main` production trigger.
+## Release артефакты
 
-## GitHub pipeline contract
+- `web` image: `ghcr.io/godnysoft/anaconda_site/web`
+- `api` image: `ghcr.io/godnysoft/anaconda_site/api`
+- release tag: `${GITHUB_SHA}`
 
-Pipeline делает:
-1. `web` — lint, typecheck, build
-2. `api` — lint, tests
-3. `smoke` — production-like boot и lead submission
-4. `deploy` — только на `main` и только при наличии production secrets
-5. `Production Operations` — ручной `status / deploy / rollback` через `workflow_dispatch`
+## Автоматический deploy
 
-Обязательные secrets:
-- `PROD_HOST`
-- `PROD_USER`
-- `PROD_SSH_PRIVATE_KEY`
-- `PROD_ENV_FILE`
+После успешного pipeline на `main` workflow `Deploy to Production`:
 
-Если `deploy` job недоступен или secrets временно невалидны, используйте manual deploy с этой машины.
+1. берёт `head_sha` успешного run;
+2. подготавливает `.env.prod` из `PROD_ENV_FILE`;
+3. запускает `infra/ansible/deploy.yml` c `deployment_action=deploy`;
+4. выкладывает новый release в `/opt/anaconda-site/releases/<sha>`;
+5. переключает `current` на новый release только после успешных healthcheck.
 
-Рекомендуемые optional variables:
-- `PROD_APP_ROOT`
-- `PROD_PUBLIC_URL`
-- `PROD_API_HEALTH_URL`
+## Manual operations
 
-## Manual deploy
+Для ручных операций используется workflow `Production Operations`:
 
-Предпочтительный ручной релиз через Ansible:
+- `status`
+- `deploy`
+- `rollback`
+
+Локально тот же сценарий можно запускать через:
 
 ```bash
-make ansible-preflight ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-make ansible-deploy ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-```
-
-Более короткий operator flow:
-
-```bash
-make ansible-status ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-make ansible-deploy ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-make ansible-status ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-```
-
-Shell deploy scripts остаются fallback для аварийных сценариев и сравнения с предыдущим процессом.
-
-После выкладки нужно проверить:
-
-```bash
-curl -f http://45.38.23.152/
-curl -f http://45.38.23.152/api/v1/health
+make ansible-status
+make ansible-deploy ANSIBLE_REF=main RELEASE_ID=<release-id>
+make ansible-rollback RELEASE_ID=<release-id>
 ```
 
 ## Rollback
 
-`infra/scripts/deploy_remote.sh` теперь пытается автоматически откатиться на предыдущий release, если новый релиз не проходит healthcheck.
-
-Если нужен ручной rollback:
-1. определить предыдущую стабильную release directory на host;
-2. выполнить rollback на нее:
-
-```bash
-make ansible-rollback ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml RELEASE_ID=<previous-release-id>
-```
-
 Rollback обязателен при:
+
 - failed healthcheck;
 - runtime regression;
 - broken public site;
 - incompatibility migrations/runtime.
+
+Автоматический rollback выполняется прямо в release playbook.
+Ручной rollback выполняется через `rollback_release_id`.

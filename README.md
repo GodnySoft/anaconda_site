@@ -1,29 +1,80 @@
-# ANACONDA
+# ANACONDA / OSNOVA
 
-Digital Symbiont Platform.
+Публичная и demo-поверхность инструмента `ANACONDA` в экосистеме `ОСНОВА`.
 
-## Getting Started
+## Локальный запуск
 
-### Prerequisites
+Текущий локальный контур поднимается через Docker Compose и `Makefile`.
 
-- Docker
-- Docker Compose
+Для Windows рекомендуется сценарий:
 
-### Local Development
+- `WSL 2`
+- `Ubuntu`
+- `make` внутри Ubuntu
+- `Docker Desktop` с включенной `WSL Integration`
 
-1.  Clone the repository.
-2.  Create a `.env` file from `.env.example` and fill in the required variables.
-3.  Run `docker-compose up -d --build`.
+Подробная инструкция:
 
-Your application should now be running:
+- [docs/windows-wsl-development.md](G:\OSNOVA\soft\anaconda_site\docs\windows-wsl-development.md)
 
--   **Web**: `http://localhost:26300`
--   **API**: `http://localhost:26800/docs`
+PowerShell bootstrap:
 
-### Pages
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\infra\scripts\bootstrap_windows_wsl_dev.ps1
+```
 
--   [Home](http://localhost:26300)
--   [Implementation Levels](http://localhost:26300/implementation-levels)
--   [Demo](http://localhost:26300/demo)
--   [Workspace](http://localhost:26300/workspace)
--   [AI Chatbot](http://localhost:26300/chatbot)
+1. Подготовить env-файлы:
+
+```powershell
+make init
+```
+
+2. Поднять dev-стек:
+
+```powershell
+make up
+```
+
+3. Проверить состояние:
+
+```powershell
+make doctor
+make ps
+make logs
+```
+
+Основные адреса:
+
+- Web: `http://localhost:26300`
+- API docs: `http://localhost:26800/docs`
+- Health: `http://localhost:26800/api/v1/health`
+
+Остановить локальный стек:
+
+```powershell
+make down
+```
+
+## Production-like локальная проверка
+
+```powershell
+make prod-config
+make prod-up
+make prod-smoke
+make prod-down
+```
+
+## Доступные маршруты
+
+- `/`
+- `/implementation-levels`
+- `/demo`
+- `/workspace`
+- `/chatbot`
+
+## Важно
+
+- `.env.example` в текущем тестовом контуре используется как базовый шаблон для локальной проверки.
+- `make test` сейчас носит информационный характер: полноценный автотестовый контур в репозитории ещё не реализован.
+- Git-состояние локальной копии после проблемного Windows-clone требует отдельного выравнивания перед следующими коммитами.

@@ -1,0 +1,2 @@
+[production]
+example-host ansible_user=deploy

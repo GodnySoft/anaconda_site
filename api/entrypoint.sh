@@ -1,9 +1,11 @@
 #!/bin/sh
 
-# Apply database migrations
+set -e
+
+# Применяем миграции перед запуском приложения.
 echo "Applying database migrations..."
 alembic upgrade head
 
-# Start the application
+# Передаем управление основной команде контейнера.
 echo "Starting application..."
 exec "$@"

@@ -1,11 +1,1 @@
-import Timeline from '../components/Timeline';
-
-export default function ImplementationLevels() {
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 text-center">Внедрение без хаоса</h1>
-      <p className="text-center mb-8">ANACONDA не требует ломать текущую систему. Мы подключаемся к действующей инфраструктуре, собираем порядок и постепенно переводим бизнес на современную управляемую модель.</p>
-      <Timeline />
-    </div>
-  );
-}
+import Timeline from '../components/Timeline';  export default function ImplementationLevels() {   return (     <div className="container mx-auto p-4">       <h1 className="text-2xl font-bold mb-4 text-center">Внедрение без хаоса</h1>       <p className="text-center mb-8">ANACONDA не требует ломать текущую систему. Мы подключаемся к действующей инфраструктуре, собираем порядок и постепенно переводим бизнес на современную управляемую модель.</p>       <Timeline />     </div>   ); }

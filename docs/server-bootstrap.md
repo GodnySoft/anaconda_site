@@ -2,63 +2,37 @@
 
 ## Назначение
 
-Bootstrap подготавливает минимальный production host для release-based deploy сайта и API.
+Документ фиксирует, что требуется от production host до запуска release-based deploy.
 
-## Текущий baseline host
+## Минимальный baseline host
 
-- Ubuntu 24.04
-- ограниченная RAM, поэтому bootstrap создает swapfile
-- вход по SSH
-- до bootstrap не гарантируются Docker и `nginx`
+- Linux host с доступом по SSH;
+- установлен Docker Engine;
+- установлен Docker Compose plugin или совместимый `docker compose`;
+- установлен `nginx`;
+- создан app root `/opt/anaconda-site`;
+- настроен доступ пользователя deploy к Docker и к директории приложения.
 
-## Что делает bootstrap
+## Что нужно подготовить до первого deploy
 
-- создает `deploy` user и добавляет его в `sudo` и `docker`
-- настраивает SSH key auth
-- ставит Docker Engine + Compose plugin
-- ставит `nginx`
-- включает UFW
-- включает fail2ban
-- включает unattended upgrades
-- создает `/opt/anaconda-site/releases`
-- создает `/opt/anaconda-site/shared/env`
-- создает `/opt/anaconda-site/shared/backups`
-- создает базовую `nginx` конфигурацию для проксирования `web` и `api`
-- добавляет cron backup для PostgreSQL
+- `/opt/anaconda-site/releases`
+- `/opt/anaconda-site/shared/env`
+- `/opt/anaconda-site/shared/backups`
+- `nginx` reverse proxy на `127.0.0.1:26300` и `127.0.0.1:26800`
+- SSH-доступ для Ansible и GitHub Actions
 
-## Чего bootstrap пока не делает
+## Текущий статус
 
-- не выдает production TLS/domain setup
-- не настраивает внешнюю observability stack
-- не добавляет полноценный WAF или advanced rate limiting
+В репозитории есть production deploy playbook:
 
-Это осознанный baseline, а не окончательная enterprise-инфраструктура.
+- `../infra/ansible/deploy.yml`
 
-## Связанные файлы
+Но полноценный bootstrap playbook production host пока отсутствует.
+Это отдельный следующий инфраструктурный слой, который ещё нужно реализовать, если мы хотим reproducible provisioning с нуля.
 
-- preferred bootstrap: `infra/ansible/playbooks/bootstrap.yml`
-- preferred inventory: `infra/ansible/inventory/hosts.yml`
-- local wrapper fallback: `infra/scripts/bootstrap_server.sh`
-- remote bootstrap fallback: `infra/scripts/server_bootstrap_remote.sh`
-- runtime deploy: `infra/scripts/deploy_remote.sh`
-- backup: `infra/scripts/backup_postgres.sh`
+## До появления bootstrap playbook
 
-## Рекомендуемый запуск
+Хост подготавливается вручную, а затем поддерживается через:
 
-1. создать inventory:
-
-```bash
-cp infra/ansible/inventory/hosts.example.yml infra/ansible/inventory/hosts.yml
-```
-
-2. выполнить bootstrap:
-
-```bash
-make ansible-bootstrap ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml ANSIBLE_ARGS="-u root -k"
-```
-
-3. после bootstrap проверить server:
-
-```bash
-make ansible-preflight ANSIBLE_INVENTORY=infra/ansible/inventory/hosts.yml
-```
+- GitHub Actions deploy;
+- ручной Ansible deploy/rollback/status.

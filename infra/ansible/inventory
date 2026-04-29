@@ -1,2 +1,1 @@
-[production]
-31.56.228.78 ansible_user=root
+[production] 31.56.228.78 ansible_user=root

@@ -1,60 +1,162 @@
-name: Build and Push Docker Images
+name: CI and Publish Images
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_API: ghcr.io/godnysoft/anaconda_site/api
-  IMAGE_NAME_WEB: ghcr.io/godnysoft/anaconda_site/web
+  API_IMAGE: ghcr.io/godnysoft/anaconda_site/api
+  WEB_IMAGE: ghcr.io/godnysoft/anaconda_site/web
 
 jobs:
-  build-and-push-api:
+  web-quality:
+    name: Web Quality
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Run frontend typecheck
+        run: npx tsc --noEmit
+
+      - name: Run frontend production build
+        run: npm run build
+
+  api-quality:
+    name: API Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install API dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile backend sources
+        run: python -m compileall app migrations
+
+  smoke:
+    name: Docker Smoke
+    runs-on: ubuntu-latest
+    needs:
+      - web-quality
+      - api-quality
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare env files
+        run: |
+          cp .env.example .env
+          cp .env.example .env.prod
+
+      - name: Validate compose files
+        run: |
+          docker compose -f docker-compose.yml config
+          docker compose -f compose.prod.yml --env-file .env.prod config
+
+      - name: Start local smoke stack
+        run: docker compose -f docker-compose.yml up -d --build
+
+      - name: Wait for API health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:26800/api/v1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Check public pages
+        run: |
+          curl -fsS http://127.0.0.1:26300 >/dev/null
+          curl -fsS http://127.0.0.1:26300/contacts >/dev/null
+
+      - name: Submit smoke lead
+        run: |
+          curl -fsS \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"CI Smoke","company":"OSNOVA","contact":"ci@example.com","message":"Smoke lead","consent":true,"source_page":"ci-smoke"}' \
+            http://127.0.0.1:26800/api/v1/leads >/dev/null
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml logs --tail=200
+
+      - name: Stop local smoke stack
+        if: always()
+        run: docker compose -f docker-compose.yml down -v --remove-orphans
+
+  publish-images:
+    name: Publish Images
+    runs-on: ubuntu-latest
+    needs:
+      - smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
-
+    strategy:
+      matrix:
+        include:
+          - component: api
+            context: ./api
+            dockerfile: ./api/Dockerfile
+            image: ghcr.io/godnysoft/anaconda_site/api
+          - component: web
+            context: ./web
+            dockerfile: ./web/Dockerfile.prod
+            image: ghcr.io/godnysoft/anaconda_site/web
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push API image
-        uses: docker/build-push-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.component }} image
+        uses: docker/build-push-action@v6
         with:
-          context: ./api
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ env.IMAGE_NAME_API }}:latest,${{ env.IMAGE_NAME_API }}:${{ github.sha }}
-
-  build-and-push-web:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_PAT }}
-
-      - name: Build and push Web image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./web
-          dockerfile: ./web/Dockerfile.prod
-          push: true
-          tags: ${{ env.IMAGE_NAME_WEB }}:latest,${{ env.IMAGE_NAME_WEB }}:${{ github.sha }}
+          tags: |
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ github.sha }}

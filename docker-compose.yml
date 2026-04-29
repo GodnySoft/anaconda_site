@@ -1,6 +1,3 @@
-
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${ANACONDA_POSTGRES_PORT:-26543}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -29,7 +26,7 @@ services:
     volumes:
       - ./api:/app
     ports:
-      - "26800:8000"
+      - "${ANACONDA_API_PORT:-26800}:8000"
     env_file:
       - ./.env
     depends_on:
@@ -48,7 +45,7 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "26300:3000"
+      - "${ANACONDA_WEB_PORT:-26300}:3000"
     env_file:
       - ./.env
     depends_on:

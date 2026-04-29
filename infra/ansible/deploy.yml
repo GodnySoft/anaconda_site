@@ -1,73 +1,294 @@
 ---
-- hosts: production
+- name: Release-based deployment for ANACONDA / OSNOVA
+  hosts: production
   become: true
-  vars_prompt:
-    - name: gh_pat
-      prompt: "Please enter your GitHub Personal Access Token (GH_PAT) for ghcr.io"
-      private: yes
+  gather_facts: true
+  vars:
+    deployment_action: "{{ deployment_action | default('deploy') }}"
+    deployment_ref: "{{ deployment_ref | default('main') }}"
+    release_id: "{{ release_id | default(ansible_date_time.iso8601_basic_short) }}"
+    rollback_release_id: "{{ rollback_release_id | default('') }}"
+    repo_url: "{{ repo_url | default('https://github.com/GodnySoft/anaconda_site.git') }}"
+    app_root: "{{ app_root | default('/opt/anaconda-site') }}"
+    releases_dir: "{{ app_root }}/releases"
+    shared_dir: "{{ app_root }}/shared"
+    shared_env_dir: "{{ shared_dir }}/env"
+    shared_backups_dir: "{{ shared_dir }}/backups"
+    current_link: "{{ app_root }}/current"
+    env_remote_path: "{{ shared_env_dir }}/.env.prod"
+    env_local_path: "{{ env_local_path | default(playbook_dir + '/../../.env.prod') }}"
+    release_path: "{{ releases_dir }}/{{ release_id }}"
+    retain_releases: "{{ retain_releases | default(5) | int }}"
+    web_health_url: "{{ web_health_url | default('http://127.0.0.1:26300/') }}"
+    api_health_url: "{{ api_health_url | default('http://127.0.0.1:26800/api/v1/health') }}"
+    ghcr_username: "{{ ghcr_username | default('') }}"
+    ghcr_token: "{{ ghcr_token | default('') }}"
 
-  tasks:
-    - name: "Ensure essential packages are installed (git, curl)"
+  pre_tasks:
+    - name: Ensure essential packages are installed
       apt:
         name:
           - git
           - curl
+          - ca-certificates
         state: present
-        update_cache: yes
+        update_cache: true
 
-    - name: "Check if Docker is installed"
+    - name: Check if Docker is installed
       stat:
         path: /usr/bin/docker
       register: docker_bin
 
-    - name: "Install Docker if not present"
-      shell: curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+    - name: Install Docker if not present
+      shell: curl -fsSL https://get.docker.com | sh
       when: not docker_bin.stat.exists
-      args:
-        warn: false
 
-    - name: "Check if Docker Compose is installed"
-      stat:
-        path: /usr/local/bin/docker-compose
-      register: docker_compose_bin
-
-    - name: "Install Docker Compose if not present"
-      get_url:
-        url: "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64"
-        dest: /usr/local/bin/docker-compose
-        mode: 'u+x,g+x,o+x'
-      when: not docker_compose_bin.stat.exists
-
-    - name: "Ensure project directory exists"
+    - name: Ensure application directories exist
       file:
-        path: /srv/anaconda
+        path: "{{ item }}"
         state: directory
+        mode: "0755"
+      loop:
+        - "{{ app_root }}"
+        - "{{ releases_dir }}"
+        - "{{ shared_dir }}"
+        - "{{ shared_env_dir }}"
+        - "{{ shared_backups_dir }}"
 
-    - name: "Clone or update the repository"
-      git:
-        repo: 'https://github.com/GodnySoft/anaconda_site.git'
-        dest: /srv/anaconda
-        version: main
-        force: yes
+    - name: Check whether current release symlink exists
+      stat:
+        path: "{{ current_link }}"
+      register: current_link_stat
 
-    - name: "Copy production environment file"
-      copy:
-        src: ../../.env.prod
-        dest: /srv/anaconda/.env.prod
+    - name: Resolve current release path
+      command: "readlink -f {{ current_link }}"
+      register: current_release_resolved
+      changed_when: false
+      when: current_link_stat.stat.exists and current_link_stat.stat.islnk | default(false)
 
-    - name: "DIAGNOSTIC: Manually log in to GHCR"
-      command: echo "{{ gh_pat }}" | docker login ghcr.io -u "GodnySoft" --password-stdin
-      no_log: true
-      register: login_result
+    - name: Store previous release path
+      set_fact:
+        previous_release_path: "{{ current_release_resolved.stdout if (current_release_resolved is defined and current_release_resolved.stdout | length > 0) else '' }}"
 
-    - name: "Show login result"
-      debug:
-        var: login_result.stdout_lines
+  tasks:
+    - name: Show current production status
+      when: deployment_action == 'status'
+      block:
+        - name: Show current release symlink
+          command: "readlink -f {{ current_link }}"
+          register: current_release_status
+          changed_when: false
+          failed_when: false
 
-    - name: "DIAGNOSTIC: Manually pull the API image"
-      command: docker pull ghcr.io/godnysoft/anaconda_site/api:latest
-      register: pull_result
+        - name: Show compose status
+          command: docker compose -f {{ current_link }}/compose.prod.yml --env-file {{ env_remote_path }} ps
+          register: compose_status
+          changed_when: false
+          failed_when: false
+          environment:
+            ANACONDA_IMAGE_TAG: "{{ current_release_status.stdout | basename if current_release_status.rc == 0 else 'latest' }}"
 
-    - name: "Show pull result"
-      debug:
-        var: pull_result.stdout_lines
+        - name: Check web health
+          uri:
+            url: "{{ web_health_url }}"
+            method: GET
+            status_code: 200
+          register: web_status
+          changed_when: false
+          failed_when: false
+
+        - name: Check api health
+          uri:
+            url: "{{ api_health_url }}"
+            method: GET
+            status_code: 200
+          register: api_status
+          changed_when: false
+          failed_when: false
+
+        - name: Print production status summary
+          debug:
+            msg:
+              - "current_release={{ current_release_status.stdout | default('not-set') }}"
+              - "web_status={{ web_status.status | default('failed') }}"
+              - "api_status={{ api_status.status | default('failed') }}"
+              - "compose_status={{ compose_status.stdout_lines | default([]) }}"
+
+    - name: Deploy new release
+      when: deployment_action == 'deploy'
+      block:
+        - name: Ensure env file exists on control machine
+          delegate_to: localhost
+          become: false
+          stat:
+            path: "{{ env_local_path }}"
+          register: env_local_stat
+
+        - name: Fail if env file is missing
+          assert:
+            that:
+              - env_local_stat.stat.exists
+            fail_msg: "Не найден env-файл для production deploy: {{ env_local_path }}"
+
+        - name: Copy production env file to shared location on host
+          copy:
+            src: "{{ env_local_path }}"
+            dest: "{{ env_remote_path }}"
+            mode: "0600"
+
+        - name: Prepare release directory
+          file:
+            path: "{{ release_path }}"
+            state: directory
+            mode: "0755"
+
+        - name: Checkout repository into release directory
+          git:
+            repo: "{{ repo_url }}"
+            dest: "{{ release_path }}"
+            version: "{{ deployment_ref }}"
+            force: true
+
+        - name: Link shared env file into release
+          file:
+            src: "{{ env_remote_path }}"
+            dest: "{{ release_path }}/.env.prod"
+            state: link
+            force: true
+
+        - name: Log in to GHCR when credentials are provided
+          shell: >-
+            echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_username }}" --password-stdin
+          no_log: true
+          when:
+            - ghcr_username | length > 0
+            - ghcr_token | length > 0
+
+        - name: Pull release images
+          command: docker compose -f compose.prod.yml --env-file {{ env_remote_path }} pull
+          args:
+            chdir: "{{ release_path }}"
+          environment:
+            ANACONDA_IMAGE_TAG: "{{ release_id }}"
+
+        - name: Start release
+          command: docker compose -f compose.prod.yml --env-file {{ env_remote_path }} up -d --remove-orphans
+          args:
+            chdir: "{{ release_path }}"
+          environment:
+            ANACONDA_IMAGE_TAG: "{{ release_id }}"
+
+        - name: Wait for web health
+          uri:
+            url: "{{ web_health_url }}"
+            method: GET
+            status_code: 200
+          register: deploy_web_health
+          retries: 20
+          delay: 5
+          until: deploy_web_health.status == 200
+
+        - name: Wait for api health
+          uri:
+            url: "{{ api_health_url }}"
+            method: GET
+            status_code: 200
+          register: deploy_api_health
+          retries: 20
+          delay: 5
+          until: deploy_api_health.status == 200
+
+        - name: Switch current symlink to new release
+          file:
+            src: "{{ release_path }}"
+            dest: "{{ current_link }}"
+            state: link
+            force: true
+
+        - name: Remove old releases beyond retention window
+          shell: |
+            set -e
+            cd "{{ releases_dir }}"
+            ls -1dt */ | sed 's:/$::' | tail -n +{{ retain_releases + 1 }} | xargs -r rm -rf
+          args:
+            executable: /bin/bash
+      rescue:
+        - name: Roll back to previous release if it exists
+          when: previous_release_path | length > 0
+          command: docker compose -f compose.prod.yml --env-file {{ env_remote_path }} up -d --remove-orphans
+          args:
+            chdir: "{{ previous_release_path }}"
+          environment:
+            ANACONDA_IMAGE_TAG: "{{ previous_release_path | basename }}"
+
+        - name: Restore current symlink to previous release
+          when: previous_release_path | length > 0
+          file:
+            src: "{{ previous_release_path }}"
+            dest: "{{ current_link }}"
+            state: link
+            force: true
+
+        - name: Fail deploy after rollback attempt
+          fail:
+            msg: >-
+              Deploy нового релиза {{ release_id }} не прошел healthcheck.
+              {{ 'Выполнен автоматический rollback на ' + previous_release_path if previous_release_path | length > 0 else 'Rollback невозможен: не найден предыдущий релиз.' }}
+
+    - name: Roll back to a selected release
+      when: deployment_action == 'rollback'
+      block:
+        - name: Ensure rollback release id is provided
+          assert:
+            that:
+              - rollback_release_id | length > 0
+            fail_msg: "Для rollback необходимо передать rollback_release_id=<release-id>"
+
+        - name: Check rollback release exists
+          stat:
+            path: "{{ releases_dir }}/{{ rollback_release_id }}"
+          register: rollback_release_stat
+
+        - name: Fail if rollback release directory is missing
+          assert:
+            that:
+              - rollback_release_stat.stat.exists
+            fail_msg: "Релиз {{ rollback_release_id }} не найден в {{ releases_dir }}"
+
+        - name: Start rollback release
+          command: docker compose -f compose.prod.yml --env-file {{ env_remote_path }} up -d --remove-orphans
+          args:
+            chdir: "{{ releases_dir }}/{{ rollback_release_id }}"
+          environment:
+            ANACONDA_IMAGE_TAG: "{{ rollback_release_id }}"
+
+        - name: Wait for rolled back web health
+          uri:
+            url: "{{ web_health_url }}"
+            method: GET
+            status_code: 200
+          register: rollback_web_health
+          retries: 20
+          delay: 5
+          until: rollback_web_health.status == 200
+
+        - name: Wait for rolled back api health
+          uri:
+            url: "{{ api_health_url }}"
+            method: GET
+            status_code: 200
+          register: rollback_api_health
+          retries: 20
+          delay: 5
+          until: rollback_api_health.status == 200
+
+        - name: Switch current symlink to rollback release
+          file:
+            src: "{{ releases_dir }}/{{ rollback_release_id }}"
+            dest: "{{ current_link }}"
+            state: link
+            force: true
+
+        - name: Print rollback result
+          debug:
+            msg: "Rollback выполнен на релиз {{ rollback_release_id }}"

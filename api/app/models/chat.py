@@ -1,20 +1,25 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import relationship
-from .lead import Base
+
+from .base import Base
+
 
 class Channel(Base):
     __tablename__ = "channels"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String(255), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    messages = relationship("Message", back_populates="channel")
+    messages = relationship("Message", back_populates="channel", cascade="all, delete-orphan")
+
 
 class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)
-    channel_id = Column(Integer, ForeignKey("channels.id"))
+    text = Column(Text, nullable=False)
+    channel_id = Column(Integer, ForeignKey("channels.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     channel = relationship("Channel", back_populates="messages")
